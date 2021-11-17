@@ -10,7 +10,7 @@
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 
-module Plutus-contracts.Typed where
+module Plutus_contracts where
 
 import           Control.Monad        hiding (fmap)
 import           Data.Map             as Map
@@ -55,19 +55,21 @@ valHash = Scripts.validatorHash typedValidator
 scrAddress :: Ledger.Address
 scrAddress = scriptAddress validator
 
-type GiftSchema =
+type StakingSchema =
             Endpoint "stake" Integer
-        .\/ Endpoint "getRewards" Integer
+        .\/ Endpoint "withdraw" Integer
 
 stake :: AsContractError e => Integer -> Contract w s e ()
 stake amount = do
     let tx = mustPayToTheScript () $ Ada.lovelaceValueOf amount
     ledgerTx <- submitTxConstraints typedValidator tx
     void $ awaitTxConfirmed $ txId ledgerTx
-    logInfo @String $ printf "made a gift of %d lovelace" amount
+    logInfo @String $ printf "made a stake of %d lovelace" amount
 
-getRewards :: forall w s e. AsContractError e => Integer -> Contract w s e ()
-getRewards r = do
+
+
+Withdraw :: forall w s e. AsContractError e => Integer -> Contract w s e ()
+withdraw r = do
     utxos <- utxoAt scrAddress
     let orefs   = fst <$> Map.toList utxos
         lookups = Constraints.unspentOutputs utxos      <>
@@ -76,14 +78,14 @@ getRewards r = do
         tx      = mconcat [mustSpendScriptOutput oref $ Redeemer $ I r | oref <- orefs]
     ledgerTx <- submitTxConstraintsWith @Void lookups tx
     void $ awaitTxConfirmed $ txId ledgerTx
-    logInfo @String $ "collected gifts"
+    logInfo @String $ 
 
-endpoints :: Contract () GiftSchema Text ()
-endpoints = (stake' `select` getRewards') >> endpoints
+endpoints :: Contract () StakingSchema Text ()
+endpoints = (stake' `select` withdraw') >> endpoints
   where
     stake' = endpoint @"stake" >>= stake
-    getRewards' = endpoint @"getRewards" >>= getRewards
+    withdraw' = endpoint @"withdraw" >>= withdraw
 
-mkSchemaDefinitions ''GiftSchema
+mkSchemaDefinitions ''StakingSchema
 
 mkKnownCurrencies []
